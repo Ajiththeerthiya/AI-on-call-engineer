@@ -81,7 +81,17 @@ graph LR
 ```
 
 ## Cypher queries
-_To be added: blast radius, root-cause path, recall past incidents, PageRank._
+All queries live in `backend/graph.py`. The agent never writes Cypher; it only picks which query to run.
+
+| Query | What it answers |
+|---|---|
+| `BLAST_RADIUS` | What breaks if this service goes down? (`<-[:DEPENDS_ON*1..5]-`) |
+| `ROOT_CAUSE_PATH` | From the alerting service, follow dependencies down to the deepest service with a recent deploy |
+| `RECALL_INCIDENTS` | Have we seen this before? Who fixed it, with which runbook? |
+| `CRITICAL_SERVICES` | PageRank over `DEPENDS_ON`: which services matter most |
+| `FIND_OWNER` | Which team owns the service, and where to message them |
+
+Load the demo data: `python seed.py` (inside `backend/`). The API also loads it automatically if the graph is empty.
 
 ## AI tools used
 _To be filled in: which AI coding assistants we used and for what._

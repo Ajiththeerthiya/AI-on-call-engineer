@@ -1,0 +1,14 @@
+[
+  {"name": "Arjun",   "email": "arjun@shop.example",   "team": "Web"},
+  {"name": "Meera",   "email": "meera@shop.example",   "team": "Web"},
+  {"name": "Priya",   "email": "priya@shop.example",   "team": "Payments"},
+  {"name": "Rahul",   "email": "rahul@shop.example",   "team": "Payments"},
+  {"name": "Sneha",   "email": "sneha@shop.example",   "team": "Payments"},
+  {"name": "Vikram",  "email": "vikram@shop.example",  "team": "Commerce"},
+  {"name": "Ananya",  "email": "ananya@shop.example",  "team": "Commerce"},
+  {"name": "Karthik", "email": "karthik@shop.example", "team": "Growth"},
+  {"name": "Divya",   "email": "divya@shop.example",   "team": "Growth"},
+  {"name": "Rohan",   "email": "rohan@shop.example",   "team": "Platform"},
+  {"name": "Lakshmi", "email": "lakshmi@shop.example", "team": "Platform"},
+  {"name": "Farhan",  "email": "farhan@shop.example",  "team": "Platform"}
+]

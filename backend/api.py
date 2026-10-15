@@ -1,12 +1,14 @@
-"""RootTrace API.
+"""RootTrace API. Matches docs/api.md.
 
-Right now every endpoint returns FAKE data (a "mock") that matches docs/api.md.
-Person B builds the UI against this. Person A later swaps in real graph queries.
 Run:  uvicorn api:app --reload --port 8000   (then open http://localhost:8000/docs)
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+import agent
+import graph
+import seed
 
 app = FastAPI(title="RootTrace API")
 app.add_middleware(
@@ -31,57 +33,42 @@ class ResolveRequest(BaseModel):
     resolved_by: str
 
 
+@app.on_event("startup")
+def seed_if_empty():
+    """If the graph is empty (new machine, or cloud DB was wiped), load the demo data."""
+    try:
+        count = graph.read("MATCH (s:Service) RETURN count(s)")[0][0]
+    except Exception:
+        count = 0
+    if count == 0:
+        seed.seed()
+
+
 @app.get("/graph")
 def get_graph():
-    # TODO (Person A): replace with a real FalkorDB query
-    return {
-        "nodes": [
-            {"id": "frontend", "label": "Service", "kind": "service", "team": "Web"},
-            {"id": "checkout", "label": "Service", "kind": "service", "team": "Payments"},
-            {"id": "payment", "label": "Service", "kind": "service", "team": "Payments"},
-            {"id": "payment-db", "label": "Service", "kind": "database", "team": "Payments"},
-        ],
-        "edges": [
-            {"from": "frontend", "to": "checkout", "type": "DEPENDS_ON"},
-            {"from": "checkout", "to": "payment", "type": "DEPENDS_ON"},
-            {"from": "payment", "to": "payment-db", "type": "DEPENDS_ON"},
-        ],
-    }
+    return graph.service_map()
 
 
 @app.post("/break")
 def break_service(req: BreakRequest):
-    # TODO (Person A): create a real Alert + bad Deployment in the graph
-    return {"alert_id": "A-101", "deployment_id": "D-021"}
+    result = graph.break_service(req.service)
+    return {"alert_id": result["alert_id"], "deployment_id": result["deployment_id"]}
 
 
 @app.post("/investigate")
 def investigate(req: InvestigateRequest):
-    # TODO (Person A): run the real agent
-    return {
-        "steps": [
-            {
-                "tool": "blast_radius",
-                "cypher": "MATCH (b:Service {name:$name})<-[:DEPENDS_ON*1..5]-(a) RETURN DISTINCT a.name",
-                "result": ["payment", "checkout", "frontend"],
-            }
-        ],
-        "root_cause": "payment-db",
-        "path": ["frontend", "checkout", "payment", "payment-db"],
-        "seen_before": {"incident_id": "INC-007", "fixed_by": "Priya", "runbook": "RB-3"},
-        "incident_id": "INC-009",
-        "answer": "Root cause is payment-db. A deploy 20 minutes ago changed it. "
-                  "Priya fixed the same problem last time with runbook RB-3.",
-    }
+    result = agent.run_fixed_investigation(req.alert_id)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 @app.post("/resolve")
 def resolve(req: ResolveRequest):
-    # TODO (Person A): save the fix to the graph as memory
-    return {"ok": True}
+    return {"ok": graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)}
 
 
 @app.post("/reset")
 def reset():
-    # TODO (Person A): delete the graph and re-run seed.py
+    seed.seed()
     return {"ok": True}

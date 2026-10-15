@@ -1,0 +1,14 @@
+[
+  {"id": "RB-1", "title": "Restart cart-redis and warm the cache",
+   "steps": "1. Check redis memory. 2. Restart the pod. 3. Run the cache warm-up job."},
+  {"id": "RB-2", "title": "Roll back the last deploy",
+   "steps": "1. Find the last deploy. 2. Run the rollback pipeline. 3. Watch error rate for 10 minutes."},
+  {"id": "RB-3", "title": "Raise payment-db connection pool and roll back",
+   "steps": "1. Roll back the payment-db config deploy. 2. Set max_connections back to 200. 3. Restart payment pods."},
+  {"id": "RB-4", "title": "Rebuild catalog-db index",
+   "steps": "1. Put catalog in read-only mode. 2. Rebuild the products index. 3. Clear the catalog cache."},
+  {"id": "RB-5", "title": "Drain and restart message-queue",
+   "steps": "1. Pause email consumers. 2. Restart the queue. 3. Replay the dead-letter queue."},
+  {"id": "RB-6", "title": "Fail over orders-db to replica",
+   "steps": "1. Promote the replica. 2. Point services to the new primary. 3. Rebuild the old primary."}
+]
