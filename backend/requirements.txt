@@ -1,0 +1,5 @@
+falkordb
+fastapi
+uvicorn
+google-genai
+python-dotenv
