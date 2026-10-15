@@ -57,7 +57,7 @@ def break_service(req: BreakRequest):
 
 @app.post("/investigate")
 def investigate(req: InvestigateRequest):
-    result = agent.run_fixed_investigation(req.alert_id)
+    result = agent.investigate(req.alert_id)  # Gemini + MCP, falls back to fixed steps
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
