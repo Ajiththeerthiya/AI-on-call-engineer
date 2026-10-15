@@ -1,0 +1,7 @@
+[
+  {"name": "Web",      "discord_channel": "#team-web"},
+  {"name": "Payments", "discord_channel": "#team-payments"},
+  {"name": "Commerce", "discord_channel": "#team-commerce"},
+  {"name": "Growth",   "discord_channel": "#team-growth"},
+  {"name": "Platform", "discord_channel": "#team-platform"}
+]
