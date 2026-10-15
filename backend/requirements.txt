@@ -3,3 +3,4 @@ fastapi
 uvicorn
 google-genai
 python-dotenv
+mcp>=2
