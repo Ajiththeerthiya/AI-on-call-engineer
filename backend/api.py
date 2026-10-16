@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 import agent
 import graph
+import notify
 import seed
 
 app = FastAPI(title="RootTrace API")
@@ -68,7 +69,15 @@ def resolve(req: ResolveRequest):
     saved = graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)
     if saved is None:
         raise HTTPException(status_code=404, detail="Incident, runbook or person not found")
-    return {"ok": True, "runbook": req.runbook_id, "resolved_by": req.resolved_by, **saved}
+    rows = graph.read("MATCH (:Incident {id: $id})-[:ROOT_CAUSE]->(s:Service) RETURN s.name",
+                      {"id": req.incident_id})
+    discord = None
+    if rows:
+        discord = notify.send(rows[0][0], f"✅ {req.incident_id} resolved by {req.resolved_by} with "
+                                          f"{req.runbook_id}. That runbook has now worked "
+                                          f"{saved['runbook_wins']} times. Saved to RootTrace memory.")
+    return {"ok": True, "runbook": req.runbook_id, "resolved_by": req.resolved_by,
+            "discord": discord, **saved}
 
 
 @app.post("/reset")

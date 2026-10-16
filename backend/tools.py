@@ -18,6 +18,7 @@ import urllib.request
 from mcp.server.mcpserver import MCPServer
 
 import graph
+import notify
 
 server = MCPServer(
     "roottrace",
@@ -109,23 +110,8 @@ def notify_team(service: str, message: str) -> dict:
     Keep the message short: root cause, impact, and the suggested fix."""
     if err := _check_service(service):
         return err
-    cypher, owner = graph.find_owner(service)
-    text = f"**[RootTrace] {owner['channel']} ({owner['team']})**\n{message}"
-    url = os.getenv("DISCORD_WEBHOOK_URL")
-    if not url:
-        return {"cypher": cypher.strip(),
-                "result": {"sent": False, "reason": "DISCORD_WEBHOOK_URL not set", "team": owner["team"],
-                           "channel": owner["channel"], "message": text}}
-    req = urllib.request.Request(
-        url, data=json.dumps({"content": text[:1900]}).encode(),
-        headers={"Content-Type": "application/json", "User-Agent": "RootTrace"}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            ok = 200 <= resp.status < 300
-    except Exception as e:  # never crash the agent because Discord failed
-        return {"cypher": cypher.strip(), "result": {"sent": False, "reason": str(e)[:200]}}
-    return {"cypher": cypher.strip(),
-            "result": {"sent": ok, "team": owner["team"], "channel": owner["channel"]}}
+    cypher, _ = graph.find_owner(service)
+    return {"cypher": cypher.strip(), "result": notify.send(service, message)}
 
 
 if __name__ == "__main__":

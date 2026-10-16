@@ -57,3 +57,7 @@ pre.cypher { background: #1f2933; color: #e4e7eb; }
 .history li.latest { font-weight: 600; }
 button.primary { background: #2f9e55; border-color: #2f9e55; color: #fff; font-weight: 600; }
 @keyframes pop { from { transform: scale(0.97); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
+
+.discord { font-size: 13px; margin: 8px 0 0; padding: 6px 10px; border-radius: 6px; }
+.discord.ok { background: #eef0ff; color: #3730a3; }
+.discord.off { background: #f3f4f6; color: #6b7280; }
