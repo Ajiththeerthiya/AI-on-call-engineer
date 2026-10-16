@@ -46,6 +46,17 @@ Output:
 ```
 `seen_before` is `null` when there is no past incident.
 
+Extra fields (added Friday, agent version):
+
+| Field | Meaning |
+|---|---|
+| `mode` | `"gemini"` = Gemini chose the tools through MCP. `"fixed"` = backup ran the queries in a fixed order. |
+| `fallback_reason` | Only when `mode` is `"fixed"`. Why the backup ran (no key, rate limit, network error). |
+| `steps[].args` | The inputs Gemini chose for that tool, e.g. `{"service": "checkout"}`. |
+
+Possible `steps[].tool` values: `root_cause_path`, `blast_radius`, `recall_incidents`,
+`find_owner`, `critical_services`, `save_incident`, `notify_team`.
+
 ## POST /resolve
 Saves the fix as memory.
 Input:

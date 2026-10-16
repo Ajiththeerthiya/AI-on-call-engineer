@@ -230,7 +230,7 @@ def resolve_incident(incident_id, runbook_id, resolved_by):
             r.success_count = coalesce(r.success_count, 0) + 1
         MERGE (i)-[:FIXED_WITH]->(r)
         MERGE (i)-[:RESOLVED_BY]->(p)
-        RETURN i.id
+        RETURN i.id, r.success_count, r.title
     """, {"id": incident_id, "rb": runbook_id, "who": resolved_by, "now": int(time.time())})
     # The fix rolled back the bad change, so it is no longer a suspect.
     write("""
@@ -238,4 +238,6 @@ def resolve_incident(incident_id, runbook_id, resolved_by):
         WHERE d.at >= i.started_at - 3600
         SET d.rolled_back = true
     """, {"id": incident_id})
-    return bool(rows)
+    if not rows:
+        return None
+    return {"incident_id": rows[0][0], "runbook_wins": rows[0][1], "runbook_title": rows[0][2]}

@@ -65,7 +65,10 @@ def investigate(req: InvestigateRequest):
 
 @app.post("/resolve")
 def resolve(req: ResolveRequest):
-    return {"ok": graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)}
+    saved = graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Incident, runbook or person not found")
+    return {"ok": True, "runbook": req.runbook_id, "resolved_by": req.resolved_by, **saved}
 
 
 @app.post("/reset")
