@@ -45,9 +45,10 @@ const STYLE = [
   { selector: "node.healed", style: { "background-color": "#2f9e55", width: 34, height: 34 } },
   { selector: "edge.healed", style: { "line-color": "#2f9e55", "target-arrow-color": "#2f9e55", width: 4 } },
   { selector: ".root", style: { "border-width": 5, "border-color": "#7a1010", width: 44, height: 44 } },
+  { selector: "node.focus", style: { "border-width": 5, "border-color": "#7c3aed", width: 40, height: 40 } },
 ];
 
-export default function GraphView({ graph, path = [], rootCause, affected = [], healed = false }) {
+export default function GraphView({ graph, path = [], rootCause, affected = [], healed = false, focus }) {
   const box = useRef(null);
   const cy = useRef(null);
 
@@ -82,7 +83,8 @@ export default function GraphView({ graph, path = [], rootCause, affected = [], 
   useEffect(() => {
     const c = cy.current;
     if (!c) return;
-    c.elements().removeClass("onpath root affected healed");
+    c.elements().removeClass("onpath root affected healed focus");
+    if (focus) c.getElementById(focus).addClass("focus"); // picked in the PageRank panel
     const cls = healed ? "healed" : "onpath"; // green after "Mark as fixed"
     affected.forEach((id) => c.getElementById(id).addClass("affected"));
     path.forEach((id, i) => {
@@ -90,7 +92,7 @@ export default function GraphView({ graph, path = [], rootCause, affected = [], 
       if (i > 0) c.getElementById(`${path[i - 1]}->${id}`).addClass(cls);
     });
     if (rootCause && !healed) c.getElementById(rootCause).addClass("root");
-  }, [path, rootCause, affected, healed, graph]);
+  }, [path, rootCause, affected, healed, focus, graph]);
 
   return <div ref={box} className="graph" />;
 }

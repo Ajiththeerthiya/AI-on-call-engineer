@@ -75,18 +75,29 @@ def investigate(req: InvestigateRequest):
 
 @app.post("/resolve")
 def resolve(req: ResolveRequest):
-    saved = graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)
-    if saved is None:
-        raise HTTPException(status_code=404, detail="Incident, runbook or person not found")
+    try:
+        saved = graph.resolve_incident(req.incident_id, req.runbook_id, req.resolved_by)
+    except graph.NotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except graph.Conflict as e:  # already fixed with a different runbook/person
+        raise HTTPException(status_code=409, detail=str(e))
     rows = graph.read("MATCH (:Incident {id: $id})-[:ROOT_CAUSE]->(s:Service) RETURN s.name",
                       {"id": req.incident_id})
     discord = None
-    if rows:
+    if rows and not saved.get("already_resolved"):  # don't post the same fix twice
         discord = notify.send(rows[0][0], f"✅ {req.incident_id} resolved by {req.resolved_by} with "
                                           f"{req.runbook_id}. That runbook has now worked "
                                           f"{saved['runbook_wins']} times. Saved to RootTrace memory.")
     return {"ok": True, "runbook": req.runbook_id, "resolved_by": req.resolved_by,
             "discord": discord, **saved}
+
+@app.get("/critical-services")
+def critical_services(limit: int = 5):
+    """PageRank over DEPENDS_ON: the services an outage would hurt most."""
+    limit = max(1, min(limit, 15))
+    cypher, services = graph.critical_overview(limit)
+    return {"algorithm": "pageRank", "cypher": cypher.strip(), "services": services}
+
 
 @app.get("/incidents/{incident_id}")
 def get_incident(incident_id: str):
