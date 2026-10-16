@@ -163,13 +163,21 @@ def _summarise(alert, steps, answer):
         steps.append({"tool": "save_incident", "args": {"auto": True}, "cypher": "CREATE (i:Incident ...)",
                       "result": {"incident_id": incident_id}})
 
-    seen_before = None
-    if past:
-        seen_before = {"incident_id": past[0]["incident"], "fixed_by": past[0]["fixed_by"],
-                       "runbook": past[0]["runbook"]}
+    seen_before = seen_before_from(past)
 
     return {"mode": "gemini", "steps": steps, "root_cause": root, "path": path,
             "seen_before": seen_before, "incident_id": incident_id, "answer": answer}
+
+
+def seen_before_from(past):
+    """Memory summary for the UI: the newest past incident plus the full history."""
+    if not past:
+        return None
+    last = past[0]
+    return {"incident_id": last["incident"], "title": last["title"],
+            "fixed_by": last["fixed_by"], "runbook": last["runbook"],
+            "runbook_title": last["runbook_title"], "runbook_wins": last["runbook_wins"],
+            "resolved_at": last["resolved_at"], "history": past}
 
 
 def investigate(alert_id):
@@ -242,8 +250,7 @@ def run_fixed_investigation(alert_id):
               f"{len(affected)} services are affected. Owner: {owner['team'] if owner else 'unknown'}.")
     if past:
         last = past[0]
-        seen_before = {"incident_id": last["incident"], "fixed_by": last["fixed_by"],
-                       "runbook": last["runbook"]}
+        seen_before = seen_before_from(past)
         answer += (f" I have seen this before: {last['incident']} - {last['title']}. "
                    f"{last['fixed_by']} fixed it with {last['runbook']} "
                    f"({last['runbook_title']}), which has worked {last['runbook_wins']} times.")
