@@ -61,3 +61,22 @@ button.primary { background: #2f9e55; border-color: #2f9e55; color: #fff; font-w
 .discord { font-size: 13px; margin: 8px 0 0; padding: 6px 10px; border-radius: 6px; }
 .discord.ok { background: #eef0ff; color: #3730a3; }
 .discord.off { background: #f3f4f6; color: #6b7280; }
+
+/* PageRank panel */
+.left { min-width: 0; }
+.badge.algo { background: #ede9fe; color: #5b21b6; }
+.crit-list { list-style: none; margin: 6px 0 4px; padding: 0; }
+.crit-row { width: 100%; display: grid; grid-template-columns: 24px 150px 1fr 175px; align-items: center; gap: 10px;
+  border: 1px solid transparent; background: none; padding: 6px 8px; border-radius: 8px; text-align: left; cursor: pointer; }
+.crit-row:hover { background: #f5f3ff; }
+.crit-row.on { border-color: #7c3aed; background: #f5f3ff; }
+.crit-rank { background: #5b21b6; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.crit-name { font-family: ui-monospace, Consolas, monospace; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+.crit-bar { height: 8px; background: #ede9fe; border-radius: 4px; overflow: hidden; }
+.crit-bar i { display: block; height: 100%; background: #7c3aed; border-radius: 4px; }
+.crit-meta { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+@media (max-width: 600px) {
+  .crit-row { grid-template-columns: 24px 1fr; }
+  .crit-bar, .crit-meta { grid-column: 2; }
+}

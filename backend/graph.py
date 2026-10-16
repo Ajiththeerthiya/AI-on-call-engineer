@@ -141,6 +141,32 @@ def critical_services(limit=5):
 
 
 # ---------------------------------------------------------------------------
+# For the UI panel: PageRank + how many services depend on each one + owner.
+# A high PageRank means many services rely on it, directly or indirectly,
+# so an outage there hurts the most.
+# ---------------------------------------------------------------------------
+CRITICAL_OVERVIEW = """
+CALL algo.pageRank('Service', 'DEPENDS_ON') YIELD node, score
+WITH node, score ORDER BY score DESC LIMIT $limit
+OPTIONAL MATCH (node)<-[:DEPENDS_ON*1..5]-(up:Service)
+WITH node, score, count(DISTINCT up) AS dependents
+OPTIONAL MATCH (t:Team)-[:OWNS]->(node)
+RETURN node.name AS service, node.kind AS kind, score, dependents, t.name AS team
+ORDER BY score DESC
+"""
+
+
+def critical_overview(limit=5):
+    rows = read(CRITICAL_OVERVIEW, {"limit": limit})
+    keys = ["service", "kind", "score", "dependents", "team"]
+    out = [dict(zip(keys, r)) for r in rows]
+    for i, row in enumerate(out, start=1):
+        row["rank"] = i
+        row["score"] = round(row["score"], 4)
+    return CRITICAL_OVERVIEW, out
+
+
+# ---------------------------------------------------------------------------
 # Helper query: who owns this service, and where do we message them?
 # ---------------------------------------------------------------------------
 FIND_OWNER = """

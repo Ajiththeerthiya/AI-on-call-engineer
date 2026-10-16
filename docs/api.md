@@ -97,3 +97,16 @@ Output:
 ```json
 {"ok": true, "counts": {"Service": 15, "Incident": 8, "...": 0}, "graph": {"nodes": [], "edges": []}}
 ```
+
+## GET /critical-services?limit=5
+The most critical services, ranked by FalkorDB **PageRank** over `DEPENDS_ON`
+(used by the "Most critical services" panel). `limit` is 1 to 15.
+```json
+{
+  "algorithm": "pageRank",
+  "cypher": "CALL algo.pageRank('Service', 'DEPENDS_ON') ...",
+  "services": [
+    {"rank": 1, "service": "catalog-db", "kind": "database", "score": 0.0348, "dependents": 4, "team": "Commerce"}
+  ]
+}
+```

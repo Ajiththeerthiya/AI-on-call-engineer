@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGraph, breakService, investigate, resolve, reset } from "./api.js";
+import { getGraph, breakService, investigate, resolve, reset, getCritical } from "./api.js";
 import GraphView from "./GraphView.jsx";
 import { modeBadge, fallbackNote, groundingWarning, notifyLabel } from "./agentMode.js";
 
@@ -99,6 +99,46 @@ function Memory({ seen }) {
   );
 }
 
+// PageRank panel: which services would hurt the most if they broke.
+function CriticalPanel({ data, selected, onPick }) {
+  if (!data?.services?.length) return null;
+  const max = Math.max(...data.services.map((s) => s.score)) || 1;
+  return (
+    <section className="card critical">
+      <div className="row">
+        <h2>Most critical services</h2>
+        <span className="badge algo">FalkorDB PageRank</span>
+      </div>
+      <p className="small">
+        Ranked by PageRank over <code>DEPENDS_ON</code>: the more services rely on it, the higher it is.
+        Click one to select it, then <b>Break it</b>.
+      </p>
+      <ol className="crit-list">
+        {data.services.map((s) => (
+          <li key={s.service}>
+            <button
+              className={`crit-row ${selected === s.service ? "on" : ""}`}
+              onClick={() => onPick(s.service)}
+              title={`PageRank score ${s.score}`}
+            >
+              <span className="crit-rank">{s.rank}</span>
+              <span className="crit-name">{s.service}</span>
+              <span className="crit-bar"><i style={{ width: `${(s.score / max) * 100}%` }} /></span>
+              <span className="crit-meta">
+                {s.dependents} depend on it · {s.team}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      <details>
+        <summary className="small">Show the Cypher</summary>
+        <pre className="cypher">{data.cypher}</pre>
+      </details>
+    </section>
+  );
+}
+
 export default function App() {
   const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [target, setTarget] = useState("payment-db");
@@ -107,8 +147,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [current, setCurrent] = useState(null); // {alert_id, deployment_id, service} from /break
 
+  const [critical, setCritical] = useState(null);
+
   useEffect(() => {
     getGraph().then(setGraph).catch((e) => setError(`Cannot reach the API: ${e.message}`));
+    getCritical().then(setCritical).catch(() => setCritical(null)); // panel is optional
   }, []);
 
   async function run(label, fn) {
@@ -158,6 +201,7 @@ export default function App() {
       setResult(null);
       setCurrent(null);
       setGraph(after.graph ?? (await getGraph()));
+      setCritical(await getCritical().catch(() => null));
     });
 
   const services = [...graph.nodes].sort((a, b) => a.id.localeCompare(b.id));
@@ -189,6 +233,7 @@ export default function App() {
       {error && <div className="error">{error}</div>}
 
       <main>
+        <div className="left">
         <section className="card graph-card">
           <GraphView
             graph={graph}
@@ -196,6 +241,7 @@ export default function App() {
             rootCause={result?.root_cause}
             affected={fixed ? [] : affectedFrom(result?.steps)}
             healed={!!fixed}
+            focus={!result ? target : null}
           />
           <div className="legend">
             <span><i className="dot svc" /> service</span>
@@ -205,6 +251,9 @@ export default function App() {
             <span><i className="dot ok" /> fixed</span>
           </div>
         </section>
+        <CriticalPanel data={critical} selected={target} onPick={(name) => !busy && setTarget(name)} />
+        </div>
+
 
         <section className="side">
           {busy && <div className="card busy"><span className="spinner" /> {busy}</div>}
