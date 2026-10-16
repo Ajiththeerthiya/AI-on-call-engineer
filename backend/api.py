@@ -88,7 +88,13 @@ def resolve(req: ResolveRequest):
     return {"ok": True, "runbook": req.runbook_id, "resolved_by": req.resolved_by,
             "discord": discord, **saved}
 
-
+@app.get("/incidents/{incident_id}")
+def get_incident(incident_id: str):
+    inc = graph.get_incident(incident_id)
+    if inc is None:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    return inc
+    
 @app.post("/reset")
 def reset():
     """Full reseed, as designed for the demo: deletes the graph (including incidents
