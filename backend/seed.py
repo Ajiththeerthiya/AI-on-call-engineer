@@ -104,7 +104,7 @@ def seed():
 
     counts = graph.read("MATCH (n) RETURN labels(n)[0] AS label, count(n) ORDER BY label")
     rels = graph.read("MATCH ()-[r]->() RETURN count(r)")[0][0]
-    print("Seeded graph 'roottrace':")
+    print(f"Seeded graph '{graph.GRAPH_NAME}':")
     for label, n in counts:
         print(f"  {label:<11} {n}")
     print(f"  relationships {rels}")

@@ -2,6 +2,8 @@
 
 Run:  uvicorn api:app --reload --port 8000   (then open http://localhost:8000/docs)
 """
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,6 +12,9 @@ import agent
 import graph
 import notify
 import seed
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("roottrace.api")
 
 app = FastAPI(title="RootTrace API")
 app.add_middleware(
@@ -52,8 +57,12 @@ def get_graph():
 
 @app.post("/break")
 def break_service(req: BreakRequest):
-    result = graph.break_service(req.service)
-    return {"alert_id": result["alert_id"], "deployment_id": result["deployment_id"]}
+    """Always a NEW failure: new deployment, new alert. Old incidents are untouched."""
+    try:
+        result = graph.break_service(req.service)
+    except graph.NotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return result  # alert_id, deployment_id (+ alert_on, service)
 
 
 @app.post("/investigate")
@@ -82,5 +91,7 @@ def resolve(req: ResolveRequest):
 
 @app.post("/reset")
 def reset():
+    """Full reseed, as designed for the demo: deletes the graph (including incidents
+    created during the session) and reloads data/. Only this endpoint does that."""
     seed.seed()
-    return {"ok": True}
+    return {"ok": True, "counts": graph.counts(), "graph": graph.service_map()}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getGraph, breakService, investigate, resolve, reset } from "./api.js";
 import GraphView from "./GraphView.jsx";
+import { modeBadge, fallbackNote, groundingWarning, notifyLabel } from "./agentMode.js";
 
 // Services affected by the outage, taken from the agent's blast_radius step.
 function affectedFrom(steps = []) {
@@ -38,6 +39,7 @@ function DiscordStatus({ info }) {
 const isRecent = (epoch) => epoch && Date.now() / 1000 - epoch < 6 * 3600;
 
 function Step({ step, index }) {
+  const note = step.tool === "notify_team" ? notifyLabel(step.result) : null;
   return (
     <details className="step">
       <summary>
@@ -46,6 +48,7 @@ function Step({ step, index }) {
         {step.args && Object.keys(step.args).length > 0 && (
           <span className="step-args">{JSON.stringify(step.args)}</span>
         )}
+        {note && <span className={`badge ${note === "sent" ? "ai" : "fixed"}`}>{note}</span>}
       </summary>
       {step.cypher && (
         <>
@@ -102,6 +105,7 @@ export default function App() {
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [current, setCurrent] = useState(null); // {alert_id, deployment_id, service} from /break
 
   useEffect(() => {
     getGraph().then(setGraph).catch((e) => setError(`Cannot reach the API: ${e.message}`));
@@ -118,30 +122,49 @@ export default function App() {
     setBusy("");
   }
 
+  // Break -> a brand-new alert + deploy on the backend. The investigation result
+  // is the only source for the incident shown, so old state is cleared first.
   const onBreak = () =>
     run(`Breaking ${target}… the agent is investigating (this can take 10–30 seconds)`, async () => {
       setResult(null);
-      const { alert_id } = await breakService(target);
-      setResult(await investigate(alert_id));
+      setCurrent(null);
+      const broke = await breakService(target);
+      setCurrent(broke);
+      const res = await investigate(broke.alert_id);
+      if (res.alert_id && res.alert_id !== broke.alert_id) {
+        throw new Error(`Backend investigated ${res.alert_id}, expected ${broke.alert_id}. Please retry.`);
+      }
+      setResult(res);
+      setGraph(await getGraph());
     });
 
+  // Mark as fixed -> only after the backend confirms the stored status is "resolved"
+  // do we show the green "fixed" state. On error, the incident stays open on screen.
   const onResolve = () =>
     run("Saving the fix to the graph memory…", async () => {
       const runbook = result.seen_before?.runbook ?? "RB-2";
       const who = result.seen_before?.fixed_by ?? "Priya";
       const saved = await resolve(result.incident_id, runbook, who);
-      setResult({ ...result, resolved: saved });
+      if (!saved.ok || saved.status !== "resolved" || saved.incident_id !== result.incident_id) {
+        throw new Error(`The fix was not saved for ${result.incident_id}. Please try again.`);
+      }
+      setResult({ ...result, incident_status: saved.status, resolved: saved });
     });
 
+  // Reset -> full reseed. Use the graph the backend sends back after reseeding.
   const onReset = () =>
     run("Resetting demo data…", async () => {
-      await reset();
+      const after = await reset();
       setResult(null);
-      setGraph(await getGraph());
+      setCurrent(null);
+      setGraph(after.graph ?? (await getGraph()));
     });
 
   const services = [...graph.nodes].sort((a, b) => a.id.localeCompare(b.id));
   const fixed = result?.resolved;
+  const badge = modeBadge(result);
+  const note = fallbackNote(result);
+  const warn = groundingWarning(result);
 
   return (
     <div className="page">
@@ -214,11 +237,15 @@ export default function App() {
               <div className={`card ${fixed ? "dim" : ""}`}>
                 <div className="row">
                   <h2>Agent answer</h2>
-                  <span className={`badge ${result.mode === "gemini" ? "ai" : "fixed"}`}>
-                    {result.mode === "gemini" ? "Gemini agent" : "Fixed backup"}
-                  </span>
+                  <span className={`badge ${badge.cls}`}>{badge.text}</span>
                 </div>
-                {result.fallback_reason && <p className="small">Backup used: {result.fallback_reason}</p>}
+                {note && <p className="small">Backup used: {note}</p>}
+                {warn && <p className="error small">{warn}</p>}
+                <p className="small">
+                  Alert <b>{result.alert_id ?? current?.alert_id}</b>
+                  {" · "}Deploy <b>{result.deployment_id ?? current?.deployment_id ?? "unknown"}</b>
+                  {result.incident_id && <>{" · "}Incident <b>{result.incident_id}</b> ({result.incident_status ?? "open"})</>}
+                </p>
                 <p className="answer">{result.answer}</p>
                 {result.path?.length > 0 && (
                   <p className="path">{result.path.join("  →  ")}</p>
@@ -228,10 +255,11 @@ export default function App() {
 
               {result.seen_before && !fixed && <Memory seen={result.seen_before} />}
 
-              {result.incident_id && !fixed && (
+              {result.incident_id && !fixed && result.incident_status !== "resolved" && (
                 <div className="card row">
                   <span>
-                    New incident <b>{result.incident_id}</b> is <b>open</b>.
+                    {result.incident_status === "resolved" ? "Incident" : "New incident"}{" "}
+                    <b>{result.incident_id}</b> is <b>{result.incident_status ?? "open"}</b>.
                   </span>
                   <button className="primary" onClick={onResolve} disabled={!!busy}>
                     Mark as fixed{result.seen_before ? ` (${result.seen_before.fixed_by}, ${result.seen_before.runbook})` : ""}
