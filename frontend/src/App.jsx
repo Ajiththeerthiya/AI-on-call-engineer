@@ -20,6 +20,21 @@ function timeAgo(epoch) {
   return "just now";
 }
 
+// Discord result from the agent's notify_team step (sent, channel, reason).
+function discordFrom(steps = []) {
+  const s = [...steps].reverse().find((x) => x.tool === "notify_team");
+  return s && typeof s.result === "object" ? s.result : null;
+}
+
+function DiscordStatus({ info }) {
+  if (!info) return null;
+  return info.sent ? (
+    <p className="discord ok">📣 Posted to Discord: {info.channel} ({info.team})</p>
+  ) : (
+    <p className="discord off">Discord not sent: {info.reason}</p>
+  );
+}
+
 const isRecent = (epoch) => epoch && Date.now() / 1000 - epoch < 6 * 3600;
 
 function Step({ step, index }) {
@@ -185,6 +200,7 @@ export default function App() {
                 <b>{fixed.incident_id}</b> is now resolved by <b>{fixed.resolved_by}</b> with runbook{" "}
                 <b>{fixed.runbook}</b>. That runbook has now worked <b>{fixed.runbook_wins} times</b>.
               </p>
+              <DiscordStatus info={fixed.discord} />
               <p className="small">
                 The graph now has a new memory: {fixed.incident_id} →FIXED_WITH→ {fixed.runbook},
                 →RESOLVED_BY→ {fixed.resolved_by}. Click <b>Break it again</b> on {result.root_cause} and
@@ -207,6 +223,7 @@ export default function App() {
                 {result.path?.length > 0 && (
                   <p className="path">{result.path.join("  →  ")}</p>
                 )}
+                <DiscordStatus info={discordFrom(result.steps)} />
               </div>
 
               {result.seen_before && !fixed && <Memory seen={result.seen_before} />}

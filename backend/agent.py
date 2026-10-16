@@ -20,6 +20,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import graph
+import notify
 
 load_dotenv()
 
@@ -53,12 +54,26 @@ who fixed it, the runbook, and how many times that runbook has worked."""
 # --------------------------------------------------------------------------
 
 def _clean_schema(schema):
-    """Remove JSON-schema 'title' fields that Gemini does not need."""
-    if isinstance(schema, dict):
-        return {k: _clean_schema(v) for k, v in schema.items() if k != "title"}
+    """Remove JSON-schema 'title' labels that Gemini does not need.
+
+    Careful: inside "properties", the keys are argument NAMES, not schema
+    labels. save_incident has a real argument called "title", so we must
+    keep it there. (Removing it caused Gemini's 400 INVALID_ARGUMENT:
+    "requires unspecified property 'title'".)
+    """
     if isinstance(schema, list):
         return [_clean_schema(v) for v in schema]
-    return schema
+    if not isinstance(schema, dict):
+        return schema
+    out = {}
+    for k, v in schema.items():
+        if k == "title":
+            continue  # schema label, safe to drop
+        if k == "properties" and isinstance(v, dict):
+            out[k] = {name: _clean_schema(sub) for name, sub in v.items()}  # keep every arg name
+        else:
+            out[k] = _clean_schema(v)
+    return out
 
 
 def _parse_tool_result(res):
@@ -165,6 +180,11 @@ def _summarise(alert, steps, answer):
 
     seen_before = seen_before_from(past)
 
+    # The owner team must always hear about it, even if the model forgot notify_team.
+    if root and not any(s["tool"] == "notify_team" for s in steps):
+        steps.append({"tool": "notify_team", "args": {"auto": True}, "cypher": "",
+                      "result": notify.send(root, f"🚨 {incident_id}: {answer}")})
+
     return {"mode": "gemini", "steps": steps, "root_cause": root, "path": path,
             "seen_before": seen_before, "incident_id": incident_id, "answer": answer}
 
@@ -254,6 +274,10 @@ def run_fixed_investigation(alert_id):
         answer += (f" I have seen this before: {last['incident']} - {last['title']}. "
                    f"{last['fixed_by']} fixed it with {last['runbook']} "
                    f"({last['runbook_title']}), which has worked {last['runbook_wins']} times.")
+
+    # 6. Tell the owner team on Discord.
+    steps.append({"tool": "notify_team", "cypher": "",
+                  "result": notify.send(root, f"🚨 {incident_id}: {answer}")})
 
     return {"steps": steps, "root_cause": root, "path": rc["path"],
             "seen_before": seen_before, "incident_id": incident_id, "answer": answer}
