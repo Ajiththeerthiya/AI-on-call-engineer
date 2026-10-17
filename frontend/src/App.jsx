@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGraph, breakService, investigate, resolve, reset, clearBreakages, } from "./api.js";
+import { getGraph, breakService, investigate, resolve, reset, clearBreakages, getCritical } from "./api.js";
 import GraphView from "./GraphView.jsx";
 import { modeBadge, fallbackNote, groundingWarning, notifyLabel, notificationLabel } from "./agentMode.js";
 
