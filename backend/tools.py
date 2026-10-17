@@ -14,8 +14,6 @@ IMPORTANT: never print() in this file. stdout is the MCP channel.
 from mcp.server.mcpserver import MCPServer
 
 import graph
-import notify
-import notify
 
 server = MCPServer(
     "roottrace",
@@ -118,14 +116,19 @@ def save_incident(alert_id: str, root_cause: str, title: str) -> dict:
 
 @server.tool()
 def notify_team(service: str, message: str) -> dict:
-    """Send `message` to the Discord channel of the team that owns `service`.
-    Keep the message short: root cause, impact, and the suggested fix.
-    The result says sent=true only if Discord confirmed delivery;
-    simulated=true means no webhook is configured and nothing was sent."""
+    """Leave a short note for the team that owns `service`: root cause, impact and
+    the suggested fix. RootTrace posts it inside the investigation summary on the
+    team's Discord channel when the investigation finishes (once per incident).
+    This tool does not deliver anything itself."""
     if err := _check_service(service):
         return err
-    cypher, _ = graph.find_owner(service)
-    return {"cypher": cypher.strip(), "result": notify.send(service, message)}
+    cypher, owner = graph.find_owner(service)
+    return {"cypher": cypher.strip(),
+            "result": {"queued": True, "sent": False, "deferred": True,
+                       "team": owner["team"] if owner else None,
+                       "channel": owner["channel"] if owner else None,
+                       "note": "Posted with the investigation summary when the investigation "
+                               "finishes. The API response reports the real delivery status."}}
 
 
 if __name__ == "__main__":

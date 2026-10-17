@@ -391,6 +391,8 @@ def resolve_incident(incident_id, runbook_id, resolved_by):
     if not read("MATCH (p:Person {name: $who}) RETURN p.name", {"who": resolved_by}):
         raise NotFound(f"Person '{resolved_by}' not found")
 
+    if inc["status"] == "cancelled":
+        raise Conflict(f"{incident_id} was cancelled by Clear breakages, so it cannot be marked fixed")
     already = inc["status"] == "resolved"
     if already and (inc["runbook_id"], inc["resolved_by"]) != (runbook_id, resolved_by):
         raise Conflict(f"{incident_id} was already resolved by {inc['resolved_by']} "
@@ -422,6 +424,83 @@ def resolve_incident(incident_id, runbook_id, resolved_by):
     log.info("incident %s resolved by %s with %s (already=%s)", incident_id, resolved_by, runbook_id, already)
     return {**saved, "runbook": runbook_id, "runbook_wins": wins, "runbook_title": rb_title,
             "already_resolved": already}
+
+
+def clear_breakages():
+    """'Fix everything that is broken now, but keep what the agent learned.'
+
+    1. Every demo bad deploy (version v9.9.9-bad) that is still live is marked
+       rolled_back = true, so root_cause_path no longer finds it. Nothing is deleted.
+    2. Every OPEN incident gets status 'cancelled' (+ cancelled_at). Cancelled is
+       not 'resolved', so it never shows up as memory and never counts as a fix.
+    3. Resolved incidents, alerts, people and runbooks are not touched.
+    4. Runbook success counts are recounted from resolved incidents (no change
+       expected; it just proves the numbers match the stored history).
+    Safe to call many times: the second call finds nothing to change.
+    Returns what changed, with the service and owner team of each item.
+    """
+    now = int(time.time())
+    deploys = write("""
+        MATCH (d:Deployment {version: 'v9.9.9-bad'})-[:CHANGED]->(s:Service)
+        WHERE coalesce(d.rolled_back, false) = false
+        SET d.rolled_back = true, d.rolled_back_at = $now
+        WITH d, s
+        OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
+        RETURN d.id, s.name, t.name, t.discord_channel ORDER BY d.id
+    """, {"now": now})
+    incidents = write("""
+        MATCH (i:Incident {status: 'open'})
+        SET i.status = 'cancelled', i.cancelled_at = $now
+        WITH i
+        OPTIONAL MATCH (i)-[:ROOT_CAUSE]->(s:Service)
+        OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
+        RETURN i.id, s.name, t.name, t.discord_channel, i.deployment_id, i.status ORDER BY i.id
+    """, {"now": now})
+    write("""
+        MATCH (r:Runbook)
+        OPTIONAL MATCH (x:Incident {status: 'resolved'})-[:FIXED_WITH]->(r)
+        WITH r, count(x) AS wins
+        SET r.success_count = wins
+    """)
+    inc_list = [{"id": r[0], "root_cause": r[1], "team": r[2], "channel": r[3],
+                 "deployment_id": r[4], "status": r[5]} for r in incidents]
+    dep_list = [{"id": r[0], "service": r[1], "team": r[2], "channel": r[3],
+                 "incidents": [i["id"] for i in inc_list if i["deployment_id"] == r[0]]} for r in deploys]
+    result = {"rolled_back_deployments": [d["id"] for d in dep_list],
+              "cancelled_incidents": [i["id"] for i in inc_list],
+              "deployments": dep_list, "incidents_changed": inc_list, "at": now}
+    log.info("clear breakages: deployments %s, incidents %s",
+             result["rolled_back_deployments"], result["cancelled_incidents"])
+    return result
+
+
+def live_bad_deployments():
+    """IDs of demo bad deploys that are still live (used in error reports)."""
+    return [r[0] for r in read("""
+        MATCH (d:Deployment {version: 'v9.9.9-bad'}) WHERE coalesce(d.rolled_back, false) = false
+        RETURN d.id ORDER BY d.id""")]
+
+
+NOTIFY_KINDS = {"created": "notified_created_at", "investigated": "notified_investigated_at",
+                "resolved": "notified_resolved_at"}
+
+
+def claim_notification(incident_id, kind):
+    """Once-only guard for Discord messages about an incident, stored on the
+    Incident itself (so it survives a backend restart). Returns True for the
+    first caller only. FalkorDB runs writes one at a time, so two requests can
+    never both get True."""
+    prop = NOTIFY_KINDS[kind]  # fixed list: never build Cypher from user input
+    rows = write(f"""
+        MATCH (i:Incident {{id: $id}}) WHERE i.{prop} IS NULL
+        SET i.{prop} = $now RETURN i.id
+    """, {"id": incident_id, "now": int(time.time())})
+    return bool(rows)
+
+
+def incident_summary():
+    """How many incidents per status, e.g. {'resolved': 9, 'cancelled': 2}."""
+    return {st: n for st, n in read("MATCH (i:Incident) RETURN i.status, count(i)")}
 
 
 def counts():

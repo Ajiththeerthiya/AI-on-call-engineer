@@ -61,6 +61,7 @@ button.primary { background: #2f9e55; border-color: #2f9e55; color: #fff; font-w
 .discord { font-size: 13px; margin: 8px 0 0; padding: 6px 10px; border-radius: 6px; }
 .discord.ok { background: #eef0ff; color: #3730a3; }
 .discord.off { background: #f3f4f6; color: #6b7280; }
+.discord.bad { background: #fdecec; color: #9b1c1c; }
 
 /* PageRank panel */
 .left { min-width: 0; }

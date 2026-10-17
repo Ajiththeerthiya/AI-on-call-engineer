@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getGraph, breakService, investigate, resolve, reset, getCritical } from "./api.js";
+import { getGraph, breakService, investigate, resolve, reset, clearBreakages, getCritical } from "./api.js";
 import GraphView from "./GraphView.jsx";
-import { modeBadge, fallbackNote, groundingWarning, notifyLabel } from "./agentMode.js";
+import { modeBadge, fallbackNote, groundingWarning, notifyLabel, notificationLabel } from "./agentMode.js";
 
 // Services affected by the outage, taken from the agent's blast_radius step.
 function affectedFrom(steps = []) {
@@ -21,19 +21,14 @@ function timeAgo(epoch) {
   return "just now";
 }
 
-// Discord result from the agent's notify_team step (sent, channel, reason).
-function discordFrom(steps = []) {
-  const s = [...steps].reverse().find((x) => x.tool === "notify_team");
-  return s && typeof s.result === "object" ? s.result : null;
-}
-
-function DiscordStatus({ info }) {
-  if (!info) return null;
-  return info.sent ? (
-    <p className="discord ok">📣 Posted to Discord: {info.channel} ({info.team})</p>
-  ) : (
-    <p className="discord off">Discord not sent: {info.reason}</p>
-  );
+// Discord delivery status, exactly as the backend reports it (one line per message).
+function DiscordStatus({ items }) {
+  const list = (items ?? []).filter(Boolean);
+  if (!list.length) return null;
+  return list.map((rec, i) => {
+    const label = notificationLabel(rec);
+    return <p key={i} className={`discord ${label.cls}`}>{label.text}</p>;
+  });
 }
 
 const isRecent = (epoch) => epoch && Date.now() / 1000 - epoch < 6 * 3600;
@@ -146,8 +141,8 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [current, setCurrent] = useState(null); // {alert_id, deployment_id, service} from /break
-
-  const [critical, setCritical] = useState(null);
+  const [cleared, setCleared] = useState(null); // last /clear response
+  const [resetInfo, setResetInfo] = useState(null); // last /reset response
 
   useEffect(() => {
     getGraph().then(setGraph).catch((e) => setError(`Cannot reach the API: ${e.message}`));
@@ -171,6 +166,8 @@ export default function App() {
     run(`Breaking ${target}… the agent is investigating (this can take 10–30 seconds)`, async () => {
       setResult(null);
       setCurrent(null);
+      setCleared(null);
+      setResetInfo(null);
       const broke = await breakService(target);
       setCurrent(broke);
       const res = await investigate(broke.alert_id);
@@ -194,12 +191,26 @@ export default function App() {
       setResult({ ...result, incident_status: saved.status, resolved: saved });
     });
 
+  // Clear breakages -> undo every open breakage but KEEP memory (resolved incidents,
+  // runbook counts). Uses only the backend's answer to update the screen.
+  const onClear = () =>
+    run("Rolling back bad deploys and cancelling open incidents…", async () => {
+      const after = await clearBreakages();
+      setResult(null);
+      setCurrent(null);
+      setCleared(after);
+      setResetInfo(null);
+      setGraph(after.graph ?? (await getGraph()));
+    });
+
   // Reset -> full reseed. Use the graph the backend sends back after reseeding.
   const onReset = () =>
     run("Resetting demo data…", async () => {
       const after = await reset();
       setResult(null);
       setCurrent(null);
+      setCleared(null);
+      setResetInfo(after);
       setGraph(after.graph ?? (await getGraph()));
       setCritical(await getCritical().catch(() => null));
     });
@@ -226,7 +237,14 @@ export default function App() {
           <button className="danger" onClick={onBreak} disabled={!!busy || !graph.nodes.length}>
             {fixed ? "Break it again" : "Break it"}
           </button>
-          <button onClick={onReset} disabled={!!busy}>Reset demo</button>
+          <button onClick={onClear} disabled={!!busy}
+                  title="Roll back all bad deploys and cancel open incidents. Keeps the agent's memory.">
+            Clear breakages
+          </button>
+          <button onClick={onReset} disabled={!!busy}
+                  title="Delete everything and reload the demo data. The agent forgets this session.">
+            Reset demo
+          </button>
         </div>
       </header>
 
@@ -258,7 +276,37 @@ export default function App() {
         <section className="side">
           {busy && <div className="card busy"><span className="spinner" /> {busy}</div>}
 
-          {!result && !busy && (
+          {cleared && !result && !busy && (
+            <div className="card fixed">
+              <h2>🧹 Breakages cleared, memory kept</h2>
+              <p>
+                Rolled back {cleared.rolled_back_deployments.length} bad deploy(s)
+                {cleared.rolled_back_deployments.length > 0 && <>: <b>{cleared.rolled_back_deployments.join(", ")}</b></>}.
+                <br />
+                Cancelled {cleared.cancelled_incidents.length} open incident(s)
+                {cleared.cancelled_incidents.length > 0 && <>: <b>{cleared.cancelled_incidents.join(", ")}</b></>}.
+              </p>
+              <p className="small">
+                Incidents in the graph now:{" "}
+                {Object.entries(cleared.incidents ?? {}).map(([k, v]) => `${v} ${k}`).join(" · ")}.
+                Cancelled incidents are not counted as fixes.
+              </p>
+              <p className="small">Simulation only: no real infrastructure was rolled back.</p>
+              <DiscordStatus items={cleared.notifications} />
+            </div>
+          )}
+
+          {resetInfo && !result && !busy && (
+            <div className="card">
+              <h2>🔄 Demo data reset</h2>
+              <p className="small">
+                The demo graph was reloaded from the data files. Production infrastructure is not affected.
+              </p>
+              <DiscordStatus items={resetInfo.notifications} />
+            </div>
+          )}
+
+          {!result && !busy && !cleared && !resetInfo && (
             <div className="card muted">
               Pick a service and click <b>Break it</b>. The alert fires on a service upstream.
               The agent follows the graph to find the real cause.
@@ -272,7 +320,7 @@ export default function App() {
                 <b>{fixed.incident_id}</b> is now resolved by <b>{fixed.resolved_by}</b> with runbook{" "}
                 <b>{fixed.runbook}</b>. That runbook has now worked <b>{fixed.runbook_wins} times</b>.
               </p>
-              <DiscordStatus info={fixed.discord} />
+              <DiscordStatus items={fixed.notifications ?? [fixed.discord]} />
               <p className="small">
                 The graph now has a new memory: {fixed.incident_id} →FIXED_WITH→ {fixed.runbook},
                 →RESOLVED_BY→ {fixed.resolved_by}. Click <b>Break it again</b> on {result.root_cause} and
@@ -299,7 +347,7 @@ export default function App() {
                 {result.path?.length > 0 && (
                   <p className="path">{result.path.join("  →  ")}</p>
                 )}
-                <DiscordStatus info={discordFrom(result.steps)} />
+                <DiscordStatus items={result.notifications} />
               </div>
 
               {result.seen_before && !fixed && <Memory seen={result.seen_before} />}

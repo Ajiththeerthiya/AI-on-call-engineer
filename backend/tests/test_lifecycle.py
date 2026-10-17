@@ -147,3 +147,70 @@ def test_9_reset_reseeds_and_returns_state(client):
 
 def test_break_unknown_service_is_404(client):
     assert client.post("/break", json={"service": "nope"}).status_code == 404
+
+
+# ---------------------------------------------------------------- Clear breakages
+
+def test_clear_breakages_keeps_memory_and_cancels_open_work(client):
+    # INC-009: broken and FIXED (this is memory we want to keep)
+    _, fixed = break_and_investigate(client, "payment-db")
+    client.post("/resolve", json={"incident_id": fixed["incident_id"], "runbook_id": "RB-3",
+                                  "resolved_by": "Priya"})
+    # INC-010 and INC-011: broken, NOT fixed
+    b2, open1 = break_and_investigate(client, "payment-db")
+    time.sleep(1.1)
+    b3, open2 = break_and_investigate(client, "currency")
+    wins_before = rb3_wins()
+
+    r = client.post("/clear").json()
+    assert r["ok"] is True
+    assert r["cancelled_incidents"] == [open1["incident_id"], open2["incident_id"]]
+    assert set(r["rolled_back_deployments"]) == {b2["deployment_id"], b3["deployment_id"]}
+    assert r["incidents"] == {"resolved": 9, "cancelled": 2}
+    assert len(r["graph"]["nodes"]) == 15
+
+    # memory kept
+    assert graph.get_incident(fixed["incident_id"])["status"] == "resolved"
+    assert rb3_wins() == wins_before == 3
+    # open work cancelled, bad deploys no longer suspects
+    assert graph.get_incident(open1["incident_id"])["status"] == "cancelled"
+    assert graph.read("MATCH (d:Deployment {version:'v9.9.9-bad'}) WHERE coalesce(d.rolled_back,false)=false "
+                      "RETURN count(d)")[0][0] == 0
+    # seed deploys untouched
+    assert graph.read("MATCH (d:Deployment) WHERE d.version <> 'v9.9.9-bad' AND d.rolled_back = true "
+                      "RETURN count(d)")[0][0] == 0
+
+
+def test_after_clear_next_break_is_new_and_remembers_only_real_fixes(client):
+    _, fixed = break_and_investigate(client, "payment-db")
+    client.post("/resolve", json={"incident_id": fixed["incident_id"], "runbook_id": "RB-3",
+                                  "resolved_by": "Priya"})
+    _, left_open = break_and_investigate(client, "payment-db")
+    client.post("/clear")
+
+    broke, res = break_and_investigate(client, "payment-db")
+    assert res["incident_id"] not in (fixed["incident_id"], left_open["incident_id"])
+    assert res["deployment_id"] == broke["deployment_id"]  # the NEW deploy, not an old one
+    assert res["seen_before"]["incident_id"] == fixed["incident_id"]  # real fix, not the cancelled one
+    assert res["seen_before"]["runbook_wins"] == 3
+    history = [h["incident"] for h in res["seen_before"]["history"]]
+    assert left_open["incident_id"] not in history
+
+
+def test_clear_twice_is_safe_and_cancelled_cannot_be_fixed(client):
+    _, res = break_and_investigate(client, "payment-db")
+    first = client.post("/clear").json()
+    second = client.post("/clear").json()
+    assert first["cancelled_incidents"] == [res["incident_id"]]
+    assert second["cancelled_incidents"] == [] and second["rolled_back_deployments"] == []
+    r = client.post("/resolve", json={"incident_id": res["incident_id"], "runbook_id": "RB-3",
+                                      "resolved_by": "Priya"})
+    assert r.status_code == 409 and "cancelled" in r.json()["detail"]
+
+
+def test_clear_with_nothing_broken_changes_nothing(client):
+    before = graph.counts()
+    r = client.post("/clear").json()
+    assert r["cancelled_incidents"] == [] and r["rolled_back_deployments"] == []
+    assert graph.counts() == before
+    assert rb3_wins() == 2

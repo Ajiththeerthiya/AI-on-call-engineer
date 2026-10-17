@@ -159,7 +159,7 @@ def test_gemini_success_is_reported_as_gemini_and_grounded(gemini):
     assert res["ungrounded_ids"] == []
     assert res["seen_before"]["incident_id"] == "INC-007"
     notify = res["steps"][-1]["result"]
-    assert notify["sent"] is False and notify["simulated"] is True  # no webhook in tests
+    assert notify["deferred"] is True and notify["sent"] is False  # the tool never posts by itself
 
 
 def test_invented_ids_are_flagged(gemini):

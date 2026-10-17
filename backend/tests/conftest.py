@@ -35,8 +35,9 @@ def _falkordb_up():
         return False
 
 
-if not _falkordb_up():
-    pytest.skip("FalkorDB is not running (start it with: docker compose up -d)", allow_module_level=True)
+def pytest_sessionstart(session):
+    if not _falkordb_up():
+        pytest.exit("FalkorDB is not running. Start it with: docker compose up -d", returncode=2)
 
 
 @pytest.fixture
