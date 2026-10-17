@@ -23,7 +23,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import graph
-import notify
 
 load_dotenv()
 
@@ -47,14 +46,17 @@ How to investigate an alert:
 4. Call find_owner on the root cause.
 5. Call save_incident once, with the alert id, the root cause and a short title.
 6. Call notify_team on the root cause with a short message: root cause, the bad deploy,
-   impact, and the runbook that worked before (if any).
+   impact, and the runbook that worked before (if any). RootTrace attaches your message to
+   the investigation summary it posts to the team's Discord channel when you finish.
 If a tool returns an error or no result, say so honestly and continue with what you know.
 
 Grounding rules:
 - Every ID (alert, deployment, incident, runbook), name and number in your answer must come
   from a tool result in this conversation. Never invent or guess one.
-- Only say the team was notified if notify_team returned "sent": true. If it returned
-  "simulated": true, say the notification was simulated (not sent).
+- Do not claim the team was notified or that a message was delivered: notify_team only
+  queues your note, and RootTrace reports the real delivery result itself.
+- Anything you suggest (roll back, apply a runbook) is a recommendation. Say so; never
+  claim it was done.
 
 Final answer: 3 to 5 short sentences in plain English. Include the root cause, the path,
 the deploy that changed it, how many services are affected, and the owner team.
@@ -402,9 +404,8 @@ def run_fixed_investigation(alert_id):
                    f"{last['fixed_by']} fixed it with {last['runbook']} "
                    f"({last['runbook_title']}), which has worked {last['runbook_wins']} times.")
 
-    # 6. Tell the owner team on Discord.
-    steps.append({"tool": "notify_team", "cypher": "",
-                  "result": notify.send(root, f"🚨 {incident_id}: {answer}")})
+    # 6. Telling the owner team on Discord happens in api.py after this returns
+    #    (notify.investigation_events), so it is posted once, with the real result.
 
     return {"steps": steps, "root_cause": root, "path": rc["path"],
             "seen_before": seen_before, "incident_id": incident_id, "answer": answer,

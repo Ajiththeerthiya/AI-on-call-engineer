@@ -5,6 +5,43 @@ Do not rename fields. Adding a new field is OK. Tell your teammate first.
 
 Base URL (local): `http://localhost:8000`
 
+## Discord notifications (all endpoints)
+
+Endpoints that change state post to Discord **after** the database change succeeded and add
+a `notifications` list to their response (one record per Discord message):
+
+```json
+{"event": "incident_created", "team": "Payments", "channel": "#team-payments",
+ "routed_via": "team", "status": "sent", "sent": true, "simulated": false,
+ "http_status": 200, "message_id": "1234567890", "at": 1792224942, "preview": "🚨 **ROOTTRACE INCIDENT CREATED** ..."}
+```
+
+| `status` | Meaning |
+|---|---|
+| `sent` | Discord confirmed the message (`message_id` is Discord's id). The only status that means delivered. |
+| `pending` | Discord had not answered within `DISCORD_WAIT_SECONDS`; see `GET /notifications` for the final status. |
+| `failed` | Discord refused or was unreachable (`reason`). The database change is kept. |
+| `not_configured` | No webhook for this team and no `DISCORD_WEBHOOK_URL`. Nothing was sent. |
+| `duplicate` | Already posted; not sent again. |
+
+`routed_via`: `team` (its own `DISCORD_WEBHOOK_<TEAM>`), `default` (`DISCORD_WEBHOOK_URL`) or `none`.
+
+| Action | Events (team = owner of the root-cause service) |
+|---|---|
+| `/investigate` (after Break it) | `incident_created`, `investigation_completed` – once per incident, even if retried |
+| `/resolve` | `incident_resolved` (not on a repeat), `incident_resolve_failed` on a database error |
+| `/clear` | `breakages_cleared` per team channel (teams sharing a webhook get one combined message), `clear_nothing`, `clear_failed` |
+| `/reset` | `demo_reset` (only after success), `demo_reset_failed` |
+| startup | `demo_seeded_on_startup` when the graph was empty |
+
+Webhook URLs never appear in responses or logs.
+
+## GET /notifications
+The latest Discord messages, newest first, with their final delivery status.
+```json
+{"notifications": [{"event": "demo_reset", "status": "sent", "...": "..."}]}
+```
+
 ## GET /graph
 The whole map, for the UI to draw.
 ```json
@@ -89,6 +126,18 @@ Errors: 404 = incident/runbook/person not found, 409 = already resolved with a d
 
 ## GET /incidents/{incident_id}
 The stored incident (same fields as above, without the runbook extras).
+
+## POST /clear
+"Clear breakages": undo every open breakage but KEEP the agent's memory.
+- Every live demo bad deploy (`v9.9.9-bad`) gets `rolled_back: true` (nothing is deleted).
+- Every `open` incident gets `status: "cancelled"`. Cancelled incidents are not memory and never count as a fix.
+- Resolved incidents and runbook counts are kept. Safe to call twice.
+Output:
+```json
+{"ok": true, "rolled_back_deployments": ["D-022", "D-023"], "cancelled_incidents": ["INC-010", "INC-011"],
+ "incidents": {"resolved": 9, "cancelled": 2}, "graph": {"nodes": [], "edges": []}}
+```
+`/resolve` on a cancelled incident returns 409.
 
 ## POST /reset
 Reloads clean demo data.

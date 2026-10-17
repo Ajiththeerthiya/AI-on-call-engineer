@@ -30,7 +30,41 @@ export function groundingWarning(result) {
 // Short label for a notify_team step result.
 export function notifyLabel(result) {
   if (!result || typeof result !== "object" || !("sent" in result)) return null;
+  if (result.deferred) return "posted with the summary";
   if (result.sent) return "sent";
   if (result.simulated) return "simulated – not sent";
   return "failed – not sent";
+}
+
+// One Discord notification record from the backend -> what the UI shows.
+// "Sent" is shown ONLY when the backend says Discord confirmed it.
+const EVENT_NAMES = {
+  incident_created: "Incident created",
+  investigation_completed: "Investigation summary",
+  incident_resolved: "Incident resolved",
+  incident_resolve_failed: "Fix failed",
+  breakages_cleared: "Rollback summary",
+  clear_nothing: "Nothing to clear",
+  clear_failed: "Clear failed",
+  demo_reset: "Demo reset",
+  demo_reset_failed: "Reset failed",
+};
+
+export function notificationLabel(rec) {
+  if (!rec) return null;
+  const what = EVENT_NAMES[rec.event] ?? rec.event;
+  const where = rec.channel ?? "Discord";
+  const via = rec.routed_via === "default" ? " (via the default webhook channel)" : "";
+  switch (rec.status) {
+    case "sent":
+      return { cls: "ok", text: `📣 ${what} → ${where}: delivered ✓${via}` };
+    case "pending":
+      return { cls: "off", text: `⏳ ${what} → ${where}: sending, not confirmed yet` };
+    case "duplicate":
+      return { cls: "off", text: `${what} → ${where}: already posted, not sent again` };
+    case "not_configured":
+      return { cls: "off", text: `${what} → ${where}: NOT sent – no Discord webhook configured` };
+    default:
+      return { cls: "bad", text: `${what} → ${where}: NOT sent – ${rec.reason ?? "unknown error"}` };
+  }
 }

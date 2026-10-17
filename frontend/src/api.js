@@ -22,4 +22,4 @@ export const investigate = (alert_id) => post("/investigate", { alert_id });
 export const resolve = (incident_id, runbook_id, resolved_by) =>
   post("/resolve", { incident_id, runbook_id, resolved_by });
 export const reset = () => post("/reset");
-export const getCritical = (limit = 5) => call(`/critical-services?limit=${limit}`);
+export const clearBreakages = () => post("/clear");
