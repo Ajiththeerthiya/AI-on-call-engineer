@@ -143,6 +143,7 @@ export default function App() {
   const [current, setCurrent] = useState(null); // {alert_id, deployment_id, service} from /break
   const [cleared, setCleared] = useState(null); // last /clear response
   const [resetInfo, setResetInfo] = useState(null); // last /reset response
+  const [critical, setCritical] = useState(null); // PageRank panel (/critical-services)
 
   useEffect(() => {
     getGraph().then(setGraph).catch((e) => setError(`Cannot reach the API: ${e.message}`));
