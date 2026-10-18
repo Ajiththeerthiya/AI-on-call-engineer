@@ -31,10 +31,15 @@ def get_graph():
     """Open the connection once and reuse it."""
     global _graph
     if _graph is None:
+        # Local Docker: no login. FalkorDB Cloud: username + password.
+        # Only send a login when a password is set; a username alone is refused.
+        password = os.getenv("FALKORDB_PASSWORD", "").strip() or None
+        username = (os.getenv("FALKORDB_USERNAME", "").strip() or None) if password else None
         db = FalkorDB(
-            host=os.getenv("FALKORDB_HOST", "localhost"),
+            host=os.getenv("FALKORDB_HOST", "localhost").strip(),
             port=int(os.getenv("FALKORDB_PORT", "6379")),
-            password=os.getenv("FALKORDB_PASSWORD") or None,
+            username=username,
+            password=password,
         )
         _graph = db.select_graph(GRAPH_NAME)
     return _graph
