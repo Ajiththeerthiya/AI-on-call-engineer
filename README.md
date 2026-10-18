@@ -5,7 +5,9 @@ tells the owner team, and remembers the fix for next time.**
 
 > **Hackathon:** Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB), 15–18 Oct 2026
 > **Tracks:** 01 Agents That Act on Connected Data · 02 Agent Memory and Coordination
-> **Live demo:** _TODO: add link_ · **Demo video:** _TODO: add link_
+> **Live demo:** https://ai-on-call-engineer.vercel.app · **API:** https://ai-on-call-engineer.onrender.com/docs · **Demo video:** https://youtu.be/sLNPF1JlorE
+>
+> _The free backend sleeps when idle: the first click can take up to a minute. If the live site is down, see [Run it locally](#run-it-locally) or the demo video._
 
 ![RootTrace screen](docs/screenshots/investigation.png)
 
@@ -328,9 +330,9 @@ As the rules require, we disclose our use of AI coding assistants.
 
 - **Claude (Anthropic)** helped with planning, the starter code (seed data, Cypher queries, MCP tools,
   the Gemini agent loop, UI components) and this README.
-- _TODO: list any other assistants the team used and what for._
+- No other AI coding assistants were used.
 
 Every change was reviewed, run and tested by the team. We can explain the graph model, every query,
 the agent loop and the architecture.
 
-**Team:** _TODO: names_ · **License / IP:** owned by the team.
+**Team:** Ajiththeerthiya R · Karishma R · **License / IP:** owned by the team.
